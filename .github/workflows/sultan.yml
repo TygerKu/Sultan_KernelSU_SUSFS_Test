@@ -84,40 +84,35 @@ jobs:
           cd "$CONFIG"
           
           echo "Applying base SUSFS patches to the kernel tree..."
-          
-          # A basic patch is applied to the kernel. We ignore the error in sys.c, which will be fixed later.
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
           
           # Integration with KernelSU
-          
-          cd ./KernelSU-Next
+          echo "Entering KernelSU-Next directory..."
+          cd KernelSU-Next
           
           echo "Applying SUSFS v1.5.8 integration patch for KernelSU-Next..."
-
-          # The main integration patch is applied
-          cp ../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
+          cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
-
+          
+          echo "Returning to root directory to apply sys.c fix..."
           cd ..
-
-          # A fix is applied for sys.c, which fixes the error from the SUSFS base patch
+          
+          echo "Applying sys.c fix..."
           cp kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
-
-          # Minor fixes are applied on top of
-
-          echo "Applying specific fixes for Sultan build..."
-
+          
+          # Minor fixes
+          echo "Re-entering KernelSU-Next for minor fixes..."
           cd KernelSU-Next
-
-          # This fix is needed to support the old manager.
+          
+          echo "Applying fix for old manager..."
           cp ../kernel_patches/next/fix_apk_sign.c.patch ./
           patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
-
-          # This fix is needed for proper unmounting.
+          
+          echo "Applying fix for proper unmounting..."
           cp ../kernel_patches/next/fix_core_hook.c.patch ./
           patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
 
