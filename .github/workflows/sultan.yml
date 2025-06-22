@@ -94,7 +94,7 @@ jobs:
           
           echo "Applying next SUSFS patches..."
           cp ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-          patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
+          patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch
 
           echo "Applying next SUSFS Fix patches..."
           cp ../../kernel_patches/next/fix_apk_sign.c.patch ./
@@ -111,7 +111,7 @@ jobs:
           
           # Change to common directory and apply SUSFS patch
           cd ..
-          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
+          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
           cp ../kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
 
