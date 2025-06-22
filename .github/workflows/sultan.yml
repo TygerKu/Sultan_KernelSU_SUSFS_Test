@@ -70,51 +70,51 @@ jobs:
           git clone https://github.com/TheWildJames/kernel_patches.git
           git clone https://github.com/kerneltoast/${{ inputs.repo }}
       
-      - name: Add KernelSU
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG"
-          
-          echo "Adding KernelSU..."
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
-
       - name: Apply SUSFS Patches
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
           
           echo "Applying base SUSFS patches to the kernel tree..."
+          
+          # Шаг 1: Применяем базовый патч к ядру. Игнорируем ошибку в sys.c, которую исправим позже.
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
           
-          # Integration with KernelSU
-          echo "Entering KernelSU-Next directory..."
-          cd KernelSU-Next
+          # --- Интеграция с KernelSU ---
+          
+          # Переходим в директорию KernelSU-Next
+          cd ./KernelSU-Next
           
           echo "Applying SUSFS v1.5.8 integration patch for KernelSU-Next..."
+          
+          # Шаг 2: Применяем основной патч интеграции (он уже включает fix_apk_sign.c изменения)
           cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
           
-          echo "Returning to root directory to apply sys.c fix..."
+          # Шаг 3: Применяем только нужный фикс для core_hook.c
+          echo "Applying core_hook.c fix for proper unmounting..."
+          
+          # Проверяем существование патча перед применением
+          if [ -f "../../kernel_patches/next/fix_core_hook.c.patch" ]; then
+            cp ../../kernel_patches/next/fix_core_hook.c.patch ./
+            patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch || echo "core_hook.c patch already applied or not needed"
+          else
+            echo "fix_core_hook.c.patch not found, skipping..."
+          fi
+          
+          # --- Финальные исправления ---
+          
+          # Возвращаемся в корень исходников ядра
           cd ..
           
-          echo "Applying sys.c fix..."
-          cp kernel_patches/sultan/sys.c_fix.patch ./
+          echo "Applying final fixes..."
+          
+          # Шаг 4: Применяем фикс для sys.c, который исправляет ошибку из Шага 1
+          cp ../kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
-          
-          # Minor fixes
-          echo "Re-entering KernelSU-Next for minor fixes..."
-          cd KernelSU-Next
-          
-          echo "Applying fix for old manager..."
-          cp ../kernel_patches/next/fix_apk_sign.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
-          
-          echo "Applying fix for proper unmounting..."
-          cp ../kernel_patches/next/fix_core_hook.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
 
       - name: Apply KSU Hooks
         run: |
