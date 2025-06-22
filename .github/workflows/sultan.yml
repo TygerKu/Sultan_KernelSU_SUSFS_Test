@@ -39,7 +39,9 @@ jobs:
       - name: Installing dependencies
         run: |
           sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu
+          sudo apt install -y gcc-aarch64-linux-gnu build-essential libncurses-dev \
+                              flex bison libssl-dev libelf-dev bc rsync kmod cpio \
+                              unzip device-tree-compiler
 
       - name: Set CONFIG Environment Variable
         run: |
@@ -214,8 +216,38 @@ jobs:
           if [ "${{ inputs.codename }}" == "zumapro" ]; then
             export KCFLAGS="-march=armv8.6-a -O3 --param=min-pagesize=0"
           fi
-          make ${{ inputs.codename }}_defconfig -j$(nproc --all)
-          make -j$(nproc --all)
+          
+          # Создаем выходную директорию
+          mkdir -p out
+          
+          # Показываем информацию о системе
+          echo "Available memory:"
+          free -h
+          echo "CPU cores: $(nproc)"
+          
+          # Создание конфигурации
+          echo "Creating defconfig..."
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out ${{ inputs.codename }}_defconfig
+          
+          # Проверяем, что конфигурация создалась
+          if [ ! -f "out/.config" ]; then
+            echo "ERROR: .config file not created"
+            exit 1
+          fi
+          
+          echo "Starting kernel compilation..."
+          # Используем меньше параллельных процессов для стабильности
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out -j4 2>&1 | tee build.log
+          
+          # Проверяем результат сборки
+          if [ ! -f "out/arch/arm64/boot/Image.lz4" ]; then
+            echo "ERROR: Kernel image not created"
+            echo "Last 50 lines of build log:"
+            tail -n 50 build.log
+            exit 1
+          fi
+          
+          echo "Kernel build completed successfully"
 
       - name: Copy Images
         run: |
@@ -223,15 +255,34 @@ jobs:
           cd "$CONFIG"
 
           echo "Copying Image.lz4 and concatenating DTB files..."
+          
+          # Проверяем наличие файлов перед копированием
+          if [ ! -f "./out/arch/arm64/boot/Image.lz4" ]; then
+            echo "ERROR: Image.lz4 not found"
+            echo "Contents of out/arch/arm64/boot/:"
+            ls -la ./out/arch/arm64/boot/ || echo "Boot directory not found"
+            exit 1
+          fi
+          
           cp ./out/arch/arm64/boot/Image.lz4 ../AnyKernel3/Image.lz4
 
           if [ "${{ inputs.codename }}" == "gs201" ]; then
             cat ./out/arch/arm64/boot/dts/google/*.dtb > ../AnyKernel3/dtb
-            cp ./out/arch/arm64/boot/dts/google/dtbo.img ../AnyKernel3/dtbo.img
+            if [ -f "./out/arch/arm64/boot/dts/google/dtbo.img" ]; then
+              cp ./out/arch/arm64/boot/dts/google/dtbo.img ../AnyKernel3/dtbo.img
+            fi
           elif [ "${{ inputs.codename }}" == "zuma" ]; then
-            cat ./out/google-devices/zuma/dts/*.dtb > ../AnyKernel3/dtb
+            if [ -d "./out/google-devices/zuma/dts" ]; then
+              cat ./out/google-devices/zuma/dts/*.dtb > ../AnyKernel3/dtb
+            else
+              echo "WARNING: zuma dts directory not found"
+            fi
           elif [ "${{ inputs.codename }}" == "zumapro" ]; then
-            cat ./out/google-devices/zumapro/dts/*.dtb > ../AnyKernel3/dtb
+            if [ -d "./out/google-devices/zumapro/dts" ]; then
+              cat ./out/google-devices/zumapro/dts/*.dtb > ../AnyKernel3/dtb
+            else
+              echo "WARNING: zumapro dts directory not found"
+            fi
           fi
 
       - name: Create ZIP Files for Different Formats
