@@ -101,6 +101,10 @@ jobs:
           cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
           
+          # A fix is applied for sys.c, which fixes the error from 0001-kernel-implementation-sysfs-v1.5.8-KernelSU-Net-v1.0.8.patch
+          cp ../kernel_patches/sultan/sys.c_fix.patch ./
+          patch -p1 --fuzz=3 < sys.c_fix.patch
+          
           # Minor fixes are applied on top of
           echo "Applying specific fixes for Sultan build..."
           
@@ -111,14 +115,6 @@ jobs:
           # This fix is needed for proper unmounting.
           cp ../../kernel_patches/next/fix_core_hook.c.patch ./
           patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
-          
-          cd ..
-          
-          echo "Applying final fixes..."
-          
-          # A fix is applied for sys.c, which fixes the error from 0001-kernel-implementation-sysfs-v1.5.8-KernelSU-Net-v1.0.8.patch
-          cp ../kernel_patches/sultan/sys.c_fix.patch ./
-          patch -p1 --fuzz=3 < sys.c_fix.patch
 
       - name: Apply KSU Hooks
         run: |
