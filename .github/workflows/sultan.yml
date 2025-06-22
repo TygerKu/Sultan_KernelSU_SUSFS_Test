@@ -109,14 +109,16 @@ jobs:
           
           # Minor fixes are applied on top of
           echo "Applying specific fixes for Sultan build..."
+
+          cd KernelSU-Next
           
           # This fix is needed to support the old manager.
-          cp ../kernel_patches/next/fix_apk_sign.c.patch ./KernelSU-Next/
-          patch -p1 --forward --fuzz=3 < KernelSU-Next/fix_apk_sign.c.patch
+          cp ../kernel_patches/next/fix_apk_sign.c.patch ./
+          patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
 
           # This fix is needed for proper unmounting.
-          cp ../kernel_patches/next/fix_core_hook.c.patch ./KernelSU-Next/
-          patch -p1 --forward --fuzz=3 < KernelSU-Next/fix_core_hook.c.patch
+          cp ../kernel_patches/next/fix_core_hook.c.patch ./
+          patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
 
       - name: Apply KSU Hooks
         run: |
