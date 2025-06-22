@@ -100,6 +100,8 @@ jobs:
           # The main integration patch is applied
           cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
+
+          cd ..
           
           # A fix is applied for sys.c, which fixes the error from 0001-kernel-implementation-sysfs-v1.5.8-KernelSU-Net-v1.0.8.patch
           cp ../kernel_patches/sultan/sys.c_fix.patch ./
@@ -109,12 +111,12 @@ jobs:
           echo "Applying specific fixes for Sultan build..."
           
           # This fix is needed to support the old manager.
-          cp ../../kernel_patches/next/fix_apk_sign.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
+          cp ../kernel_patches/next/fix_apk_sign.c.patch ./KernelSU-Next/
+          patch -p1 --forward --fuzz=3 < KernelSU-Next/fix_apk_sign.c.patch
 
           # This fix is needed for proper unmounting.
-          cp ../../kernel_patches/next/fix_core_hook.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
+          cp ../kernel_patches/next/fix_core_hook.c.patch ./KernelSU-Next/
+          patch -p1 --forward --fuzz=3 < KernelSU-Next/fix_core_hook.c.patch
 
       - name: Apply KSU Hooks
         run: |
