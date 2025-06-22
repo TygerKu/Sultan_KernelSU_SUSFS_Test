@@ -82,27 +82,44 @@ jobs:
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
           
-          echo "Applying SUSFS patches to the main kernel tree..."
+          echo "Applying base SUSFS patches to the kernel tree..."
           
-          # Шаг 1: Применяем патч к основному дереву ядра (это не меняется)
+          # Шаг 1: Применяем базовый патч к ядру. Игнорируем ошибку в sys.c, которую исправим позже.
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
           
-          # Переходим в директорию KernelSU-Next для интеграции
+          # --- Интеграция с KernelSU ---
+          
+          # Переходим в директорию KernelSU-Next
           cd ./KernelSU-Next
           
           echo "Applying SUSFS v1.5.8 integration patch for KernelSU-Next..."
           
-          # Шаг 2: Копируем ОДИН правильный, большой патч для версии 1.5.8 из нашего репозитория
+          # Шаг 2: Применяем основной патч интеграции
           cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
-
-          # Шаг 3: Применяем его. Он должен примениться чисто, так как он самый актуальный.
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
           
-          # Шаг 4: Применяем финальный фикс для sys.c, если он еще нужен (он не повредит)
+          # Шаг 3: Применяем НУЖНЫЕ мелкие фиксы поверх
+          echo "Applying specific fixes for Sultan build..."
+          
+          # Этот фикс нужен для поддержки старого менеджера
+          cp ../../kernel_patches/next/fix_apk_sign.c.patch ./
+          patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
+
+          # Этот фикс нужен для правильного размонтирования
+          cp ../../kernel_patches/next/fix_core_hook.c.patch ./
+          patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
+          
+          # --- Финальные исправления ---
+          
+          # Возвращаемся в корень исходников ядра
           cd ..
+          
+          echo "Applying final fixes..."
+          
+          # Шаг 4: Применяем фикс для sys.c, который исправляет ошибку из Шага 1
           cp ../kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
 
