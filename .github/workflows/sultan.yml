@@ -82,35 +82,27 @@ jobs:
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
           
-          echo "Applying SUSFS patches..."
+          echo "Applying SUSFS patches to the main kernel tree..."
           
-          # Copy SUSFS patches
+          # Шаг 1: Применяем патч к основному дереву ядра (это не меняется)
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-
+          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
+          
+          # Переходим в директорию KernelSU-Next для интеграции
           cd ./KernelSU-Next
           
-          echo "Applying next SUSFS patches..."
-          cp ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-          patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch
-
-          echo "Applying next SUSFS Fix patches..."
-          cp ../../kernel_patches/next/fix_apk_sign.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
-          cp ../../kernel_patches/next/fix_core_hook.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
-          cp ../../kernel_patches/next/fix_selinux.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_selinux.c.patch
-          cp ../../kernel_patches/next/fix_ksud.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_ksud.c.patch
-          cp ../../kernel_patches/next/fix_sucompat.c.patch ./
-          patch -p1 --forward --fuzz=3 < fix_sucompat.c.patch
-          sed -i '/bool ksu_devpts_hook = false;/d' ./kernel/sucompat.c
+          echo "Applying SUSFS v1.5.8 integration patch for KernelSU-Next..."
           
-          # Change to common directory and apply SUSFS patch
+          # Шаг 2: Копируем ОДИН правильный, большой патч для версии 1.5.8 из нашего репозитория
+          cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
+
+          # Шаг 3: Применяем его. Он должен примениться чисто, так как он самый актуальный.
+          patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
+          
+          # Шаг 4: Применяем финальный фикс для sys.c, если он еще нужен (он не повредит)
           cd ..
-          patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch
           cp ../kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
 
