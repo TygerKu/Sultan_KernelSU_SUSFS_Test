@@ -39,9 +39,7 @@ jobs:
       - name: Installing dependencies
         run: |
           sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu build-essential libncurses-dev \
-                              flex bison libssl-dev libelf-dev bc rsync kmod cpio \
-                              unzip device-tree-compiler
+          sudo apt install -y gcc-aarch64-linux-gnu
 
       - name: Set CONFIG Environment Variable
         run: |
@@ -68,7 +66,7 @@ jobs:
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
           cd susfs4ksu
           cd ..
-          git clone https://github.com/etherealNest/kernel_patches.git
+          git clone https://github.com/TheWildJames/kernel_patches.git
           git clone https://github.com/kerneltoast/${{ inputs.repo }}
       
       - name: Add KernelSU
@@ -79,64 +77,34 @@ jobs:
           echo "Adding KernelSU..."
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
-      - name: Apply SUSFS Base Patches
+      - name: Apply SUSFS Patches
         run: |
           echo "Changing to configuration directory: $CONFIG..."
           cd "$CONFIG"
           
-          echo "Applying base SUSFS patches to the kernel tree..."
+          echo "Applying SUSFS patches to the main kernel tree..."
           
-          # Применяем базовый патч к ядру. Игнорируем ошибку в sys.c, которую исправим позже.
+          # Шаг 1: Применяем патч к основному дереву ядра (это не меняется)
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
           
-          echo "Base SUSFS patches applied (sys.c error expected and will be fixed later)"
-          
-      - name: Apply SUSFS Integration with KernelSU
-        run: |
-          echo "Changing to configuration directory: $CONFIG..."
-          cd "$CONFIG"
-          
-          # Проверяем существование директории KernelSU-Next
-          if [ ! -d "./KernelSU-Next" ]; then
-            echo "ERROR: KernelSU-Next directory not found. Make sure KernelSU step runs before this."
-            echo "Contents of current directory:"
-            ls -la
-            exit 1
-          fi
-          
-          # Переходим в директорию KernelSU-Next
+          # Переходим в директорию KernelSU-Next для интеграции
           cd ./KernelSU-Next
           
           echo "Applying SUSFS v1.5.8 integration patch for KernelSU-Next..."
           
-          # Применяем основной патч интеграции (он уже включает fix_apk_sign.c изменения)
+          # Шаг 2: Копируем ОДИН правильный, большой патч для версии 1.5.8 из нашего репозитория
           cp ../../kernel_patches/next/0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch ./
+
+          # Шаг 3: Применяем его. Он должен примениться чисто, так как он самый актуальный.
           patch -p1 < 0001-kernel-implement-susfs-v1.5.8-KernelSU-Next-v1.0.8.patch
           
-          # Применяем только нужный фикс для core_hook.c (если существует)
-          echo "Checking for core_hook.c fix..."
-          
-          if [ -f "../../kernel_patches/next/fix_core_hook.c.patch" ]; then
-            echo "Applying core_hook.c fix for proper unmounting..."
-            cp ../../kernel_patches/next/fix_core_hook.c.patch ./
-            patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch || echo "core_hook.c patch already applied or not needed"
-          else
-            echo "fix_core_hook.c.patch not found, skipping..."
-          fi
-          
-          # Возвращаемся в корень исходников ядра
+          # Шаг 4: Применяем финальный фикс для sys.c, если он еще нужен (он не повредит)
           cd ..
-          
-          echo "Applying final sys.c fix..."
-          
-          # Применяем фикс для sys.c, который исправляет ошибку из базового патча
           cp ../kernel_patches/sultan/sys.c_fix.patch ./
           patch -p1 --fuzz=3 < sys.c_fix.patch
-          
-          echo "SUSFS integration completed successfully"
 
       - name: Apply KSU Hooks
         run: |
@@ -216,38 +184,8 @@ jobs:
           if [ "${{ inputs.codename }}" == "zumapro" ]; then
             export KCFLAGS="-march=armv8.6-a -O3 --param=min-pagesize=0"
           fi
-          
-          # Создаем выходную директорию
-          mkdir -p out
-          
-          # Показываем информацию о системе
-          echo "Available memory:"
-          free -h
-          echo "CPU cores: $(nproc)"
-          
-          # Создание конфигурации
-          echo "Creating defconfig..."
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out ${{ inputs.codename }}_defconfig
-          
-          # Проверяем, что конфигурация создалась
-          if [ ! -f "out/.config" ]; then
-            echo "ERROR: .config file not created"
-            exit 1
-          fi
-          
-          echo "Starting kernel compilation..."
-          # Используем меньше параллельных процессов для стабильности
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- O=out -j4 2>&1 | tee build.log
-          
-          # Проверяем результат сборки
-          if [ ! -f "out/arch/arm64/boot/Image.lz4" ]; then
-            echo "ERROR: Kernel image not created"
-            echo "Last 50 lines of build log:"
-            tail -n 50 build.log
-            exit 1
-          fi
-          
-          echo "Kernel build completed successfully"
+          make ${{ inputs.codename }}_defconfig -j$(nproc --all)
+          make -j$(nproc --all)
 
       - name: Copy Images
         run: |
@@ -255,34 +193,15 @@ jobs:
           cd "$CONFIG"
 
           echo "Copying Image.lz4 and concatenating DTB files..."
-          
-          # Проверяем наличие файлов перед копированием
-          if [ ! -f "./out/arch/arm64/boot/Image.lz4" ]; then
-            echo "ERROR: Image.lz4 not found"
-            echo "Contents of out/arch/arm64/boot/:"
-            ls -la ./out/arch/arm64/boot/ || echo "Boot directory not found"
-            exit 1
-          fi
-          
           cp ./out/arch/arm64/boot/Image.lz4 ../AnyKernel3/Image.lz4
 
           if [ "${{ inputs.codename }}" == "gs201" ]; then
             cat ./out/arch/arm64/boot/dts/google/*.dtb > ../AnyKernel3/dtb
-            if [ -f "./out/arch/arm64/boot/dts/google/dtbo.img" ]; then
-              cp ./out/arch/arm64/boot/dts/google/dtbo.img ../AnyKernel3/dtbo.img
-            fi
+            cp ./out/arch/arm64/boot/dts/google/dtbo.img ../AnyKernel3/dtbo.img
           elif [ "${{ inputs.codename }}" == "zuma" ]; then
-            if [ -d "./out/google-devices/zuma/dts" ]; then
-              cat ./out/google-devices/zuma/dts/*.dtb > ../AnyKernel3/dtb
-            else
-              echo "WARNING: zuma dts directory not found"
-            fi
+            cat ./out/google-devices/zuma/dts/*.dtb > ../AnyKernel3/dtb
           elif [ "${{ inputs.codename }}" == "zumapro" ]; then
-            if [ -d "./out/google-devices/zumapro/dts" ]; then
-              cat ./out/google-devices/zumapro/dts/*.dtb > ../AnyKernel3/dtb
-            else
-              echo "WARNING: zumapro dts directory not found"
-            fi
+            cat ./out/google-devices/zumapro/dts/*.dtb > ../AnyKernel3/dtb
           fi
 
       - name: Create ZIP Files for Different Formats
